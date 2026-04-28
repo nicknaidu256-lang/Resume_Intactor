@@ -1,0 +1,16 @@
+Rewrite this professional summary to highlight qualifications for the following job:
+
+Job Title: {job_title}
+Company: {company}
+Required Skills: {required_skills}
+Keywords: {keywords}
+
+Original Summary:
+{original_summary}
+
+Instructions:
+- Write a concise 3-4 line summary.
+- Emphasize fit for this specific role.
+- Incorporate relevant keywords from the job description.
+- Keep factual accuracy; do not invent experience.
+- Return only the rewritten summary text.

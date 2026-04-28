@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# Output files
+output/
+outputs/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node (for frontend if needed)
+node_modules/
+package-lock.json
+
+# Debug and temp scripts (do not commit)
+check_*.py
+compare*.py
+inspect*.py
+quick_check.py
+simple_check.py
+verify*.py
+test_check.py
+test_config.py
+test_duplication_scenarios.py
+test_inference.py
+test_layout_engine.py
+*.pyc
+
+# Temp archives
+temp_archive_orig/
+temp_master/
+*.zip

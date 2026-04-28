@@ -1,0 +1,16 @@
+Tailor these resume bullet points for the job described below:
+
+Section: {section_name}
+Job Requirements (required skills): {required_skills}
+Job Keywords: {keywords}
+
+Original Bullet Points:
+{original_bullets}
+
+Instructions:
+- Rewrite EACH bullet to better align with the job requirements.
+- Emphasize quantifiable achievements and outcomes where possible.
+- Use action verbs and incorporate relevant keywords.
+- Maintain the SAME NUMBER of bullet points as the original.
+- Return ONLY the rewritten bullets, one per line, no numbering or markdown.
+- Do not add explanations or extra text.
