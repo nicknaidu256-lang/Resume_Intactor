@@ -1,153 +1,134 @@
-"""Database module for AU Job Application Pipeline."""
+"""Simple SQLite database for job tracking."""
 
-from datetime import datetime
+import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict
 
-from sqlalchemy import (
-    Boolean,
-    Date,
-    DateTime,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    create_engine,
-)
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker 
-
-from .config import get_settings
-from .logger import get_logger
+DB_PATH = Path("data/jobs.db")
 
 
-class Base(DeclarativeBase):
-    """Base class for all database models."""
-    pass
-
-
-class Job(Base):
-    """Job listing model."""
-    __tablename__ = "jobs"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    source: Mapped[str] = mapped_column(String(50), nullable=False)
-    source_job_id: Mapped[str] = mapped_column(String(100), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    company: Mapped[str] = mapped_column(String(255), nullable=False)
-    location: Mapped[Optional[str]] = mapped_column(String(255))
-    salary_text: Mapped[Optional[str]] = mapped_column(String(255))
-    salary_min: Mapped[Optional[int]] = mapped_column(Integer)
-    salary_max: Mapped[Optional[int]] = mapped_column(Integer)
-    salary_confidence: Mapped[Optional[float]] = mapped_column(Numeric(3, 2))
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    url: Mapped[str] = mapped_column(String(500), nullable=False)
-    posted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    score: Mapped[Optional[float]] = mapped_column(Numeric(4, 2))
-    score_reason: Mapped[Optional[str]] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    applications: Mapped[list["Application"]] = relationship(back_populates="job")
-    documents: Mapped[list["Document"]] = relationship(back_populates="job")
-
-
-class Application(Base):
-    """Job application model."""
-    __tablename__ = "applications"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=False)       
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="discovered")     
-    applied_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    portal_type: Mapped[Optional[str]] = mapped_column(String(50))
-    resume_path: Mapped[Optional[str]] = mapped_column(String(500))
-    cover_letter_path: Mapped[Optional[str]] = mapped_column(String(500))
-    submission_result: Mapped[Optional[str]] = mapped_column(Text)
-    notes: Mapped[Optional[str]] = mapped_column(Text)
-    next_follow_up_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    job: Mapped["Job"] = relationship(back_populates="applications")
-    followups: Mapped[list["Followup"]] = relationship(back_populates="application")
-    portal_attempts: Mapped[list["PortalAttempt"]] = relationship(back_populates="application")
-
-
-class Document(Base):
-    """Generated document model (resume/cover letter)."""
-    __tablename__ = "documents"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id"), nullable=False)       
-    doc_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, default=1)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    job: Mapped["Job"] = relationship(back_populates="documents")
-
-
-class Followup(Base):
-    """Follow-up reminder model."""
-    __tablename__ = "followups"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(Integer, ForeignKey("applications.id"), nullable=False)
-    followup_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")        
-    notes: Mapped[Optional[str]] = mapped_column(Text)
-
-    application: Mapped["Application"] = relationship(back_populates="followups")
-
-
-class PortalAttempt(Base):
-    """Portal automation attempt log."""
-    __tablename__ = "portal_attempts"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    application_id: Mapped[int] = mapped_column(Integer, ForeignKey("applications.id"), nullable=False)
-    portal_name: Mapped[str] = mapped_column(String(50), nullable=False)
-    step_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    result: Mapped[str] = mapped_column(String(20), nullable=False)
-    error_message: Mapped[Optional[str]] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    application: Mapped["Application"] = relationship(back_populates="portal_attempts")       
-
-
-_engine = None
-_SessionLocal = None
-
-
-def get_engine():
-    """Get or create SQLAlchemy engine."""
-    global _engine
-    if _engine is None:
-        settings = get_settings()
-        db_path = settings.database.database_path
-
-        db_file = Path(__file__).parent.parent.parent / db_path
-        db_file.parent.mkdir(parents=True, exist_ok=True)
-
-        database_url = f"sqlite:///{db_file}"
-        _engine = create_engine(
-            database_url,
-            echo=False,
-            connect_args={"check_same_thread": False},
-        )
-    return _engine
-
-
-def get_session():
-    """Get a new database session."""
-    global _SessionLocal
-    if _SessionLocal is None:
-        _SessionLocal = sessionmaker(bind=get_engine(), autocommit=False, autoflush=False)    
-    return _SessionLocal()
+def get_connection():
+    """Get database connection."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(DB_PATH)
 
 
 def init_db():
-    """Initialize database tables."""
-    logger = get_logger(__name__)
-    engine = get_engine()
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created successfully")
+    """Initialize database schema."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS jobs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            source_job_id TEXT,
+            title TEXT,
+            company TEXT,
+            location TEXT,
+            url TEXT,
+            salary_text TEXT,
+            description TEXT,
+            score REAL DEFAULT 0.0,
+            status TEXT DEFAULT 'new',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def save_job(job: Dict) -> int:
+    """Save a job to database."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO jobs (source, source_job_id, title, company, location, url, salary_text, description, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        job.get("source"),
+        job.get("source_job_id"),
+        job.get("title"),
+        job.get("company"),
+        job.get("location"),
+        job.get("url"),
+        job.get("salary_text"),
+        job.get("description"),
+        "new"
+    ))
+    conn.commit()
+    job_id = c.lastrowid
+    conn.close()
+    return job_id
+
+
+def save_jobs(jobs: List[Dict]) -> int:
+    """Save multiple jobs to database."""
+    conn = get_connection()
+    c = conn.cursor()
+    count = 0
+    for job in jobs:
+        c.execute("""
+            INSERT INTO jobs (source, source_job_id, title, company, location, url, salary_text, description, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            job.get("source"),
+            job.get("source_job_id"),
+            job.get("title"),
+            job.get("company"),
+            job.get("location"),
+            job.get("url"),
+            job.get("salary_text"),
+            job.get("description"),
+            "new"
+        ))
+        count += 1
+    conn.commit()
+    conn.close()
+    return count
+
+
+def get_jobs(limit: int = 50, status: Optional[str] = None) -> List[Dict]:
+    """Get jobs from database."""
+    conn = get_connection()
+    c = conn.cursor()
+    
+    if status:
+        c.execute("SELECT * FROM jobs WHERE status = ? ORDER BY created_at DESC LIMIT ?", (status, limit))
+    else:
+        c.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,))
+    
+    columns = [description[0] for description in c.description]
+    jobs = [dict(zip(columns, row)) for row in c.fetchall()]
+    conn.close()
+    return jobs
+
+
+def get_stats() -> Dict:
+    """Get statistics from database."""
+    conn = get_connection()
+    c = conn.cursor()
+    
+    c.execute("SELECT COUNT(*) FROM jobs")
+    total = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM jobs WHERE status = 'new'")
+    new_count = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM jobs WHERE status = 'applied'")
+    applied = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM jobs WHERE status = 'interview'")
+    interview = c.fetchone()[0]
+    
+    conn.close()
+    
+    return {
+        "total": total,
+        "new": new_count,
+        "applied": applied,
+        "interview": interview
+    }
+
+
+# Initialize on import
+init_db()

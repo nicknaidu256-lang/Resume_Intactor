@@ -42,6 +42,7 @@ class Config:
     score_threshold: float
     max_jobs_per_run: int
     scraping: SimpleNamespace
+    database_path: Path # New field for database path
 
     def __init__(self):
         """Load and validate configuration."""
@@ -59,6 +60,7 @@ class Config:
         self.job_input_path = PROJECT_ROOT / os.getenv("JOB_INPUT_PATH", "input/job_description.txt")
         self.output_dir = PROJECT_ROOT / os.getenv("OUTPUT_DIR", "output/")
         self.log_path = PROJECT_ROOT / os.getenv("LOG_PATH", "logs/run.log")
+        self.database_path = PROJECT_ROOT / os.getenv("DATABASE_PATH", "data/jobs.db") # Initialize new field
 
         # Logging
         self.log_level = os.getenv("LOG_LEVEL", "INFO").upper()

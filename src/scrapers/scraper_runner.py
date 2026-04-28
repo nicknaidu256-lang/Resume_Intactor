@@ -1,18 +1,13 @@
-"""Scraper runner - orchestrates the full job discovery pipeline.
-
-Executes:
-1. Run SEEK and Jora scrapers (with error isolation)
-2. Deduplicate results
-"""
+"""Scraper runner - orchestrates the full job discovery pipeline."""
 
 import logging
 from typing import List, Dict, Optional
 
-# Setup basic logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
 from src.config import config
+from src.core.database import save_jobs, init_db
 
 
 def run_full_scrape(
@@ -49,7 +44,7 @@ def run_full_scrape(
                 "title": r.title,
                 "company": r.company,
                 "location": r.location,
-                "url": r.url,
+                "url": r.url or f"https://www.seek.com.au/job/{r.source_job_id}",
                 "salary_text": r.salary_text,
                 "description": r.description,
             })
@@ -69,7 +64,7 @@ def run_full_scrape(
                 "title": r.title,
                 "company": r.company,
                 "location": r.location,
-                "url": r.url,
+                "url": r.url or f"https://au.jora.com/job/{r.source_job_id}",
                 "salary_text": r.salary_text,
                 "description": r.description,
             })
@@ -86,6 +81,14 @@ def run_full_scrape(
             seen.add(key)
             unique_jobs.append(job)
     
+    # Save to database
+    try:
+        init_db()  # Ensure DB exists
+        saved = save_jobs(unique_jobs)
+        logger.info(f"Saved {saved} jobs to database")
+    except Exception as e:
+        logger.warning(f"Failed to save jobs to DB: {e}")
+    
     logger.info(f"Total unique jobs: {len(unique_jobs)}")
     return unique_jobs
 
@@ -95,16 +98,7 @@ def scrape_single_source(
     keywords: List[str],
     location: str,
 ) -> List[Dict]:
-    """Scrape from a single source.
-    
-    Args:
-        source: 'seek' or 'jora'
-        keywords: Search keywords
-        location: Location
-        
-    Returns:
-        List of job dictionaries
-    """
+    """Scrape from a single source."""
     jobs = []
     
     try:
