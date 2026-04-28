@@ -6,6 +6,7 @@ import click
 from src.config import config
 from src.utils import setup_logging
 from src.resume_generator import run as run_generator
+from src.ui.pages.dashboard import create_dashboard
 
 
 def _setup_cli_logging(log_level: str, verbose: bool):
@@ -124,6 +125,13 @@ def run():
 
     for job in scored[:config.max_jobs_per_run]:
         click.echo(f"  - {job['title']} @ {job['company']} (score: {job['score']})")
+
+
+@cli.command()
+def dashboard():
+    """Launch dashboard UI"""
+    click.echo("Opening dashboard at http://localhost:8080")
+    create_dashboard().run()
 
 
 if __name__ == "__main__":

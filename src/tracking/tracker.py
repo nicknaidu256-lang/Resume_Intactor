@@ -1,17 +1,18 @@
-"""Application tracking module for AU Job Application Pipeline.
+"""Application tracking helpers backed by the local SQLite database."""
 
-Handles application status tracking, follow-up management, and dashboard views.
-"""
+from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Optional, List
+from pathlib import Path
+from typing import List, Optional
 
-from src.core.database import get_session, Job, Application, Followup
 from src.utils import get_logger
 
-logger = get_logger("tracking")
+logger = get_logger()
+DB_PATH = Path(__file__).parent.parent.parent / "data" / "jobs.db"
 
 
 class ApplicationStatus(Enum):
@@ -50,7 +51,12 @@ class ApplicationTracker:
     """Tracks job applications and their status."""
 
     def __init__(self):
-        pass
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    def _connect(self):
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
 
     def create_application(
         self,
@@ -58,7 +64,7 @@ class ApplicationTracker:
         status: str = "discovered",
         resume_path: Optional[str] = None,
         cover_letter_path: Optional[str] = None,
-    ) -> Application:
+    ) -> dict:
         """Create a new application record.
 
         Args:
@@ -70,42 +76,43 @@ class ApplicationTracker:
         Returns:
             Created Application object
         """
-        session = get_session()
-
+        conn = self._connect()
         try:
-            job = session.query(Job).filter(Job.id == job_id).first()
-            if not job:
-                raise ValueError(f"Job {job_id} not found")
-
-            application = Application(
-                job_id=job_id,
-                status=status,
-                resume_path=resume_path,
-                cover_letter_path=cover_letter_path,
-                created_at=datetime.now(timezone.utc),
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS applications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'discovered',
+                    applied_at TEXT,
+                    resume_path TEXT,
+                    cover_letter_path TEXT,
+                    notes TEXT,
+                    created_at TEXT
+                )
+                """
             )
-
-            session.add(application)
-            session.commit()
-            session.refresh(application)
-
-            logger.info(f"Created application {application.id} for job {job_id}")
-
-            return application
-
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Failed to create application: {e}")
-            raise
+            cur.execute(
+                """
+                INSERT INTO applications (job_id, status, resume_path, cover_letter_path, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (job_id, status, resume_path, cover_letter_path, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            app_id = cur.lastrowid
+            logger.info(f"Created application {app_id} for job {job_id}")
+            return {"id": app_id, "job_id": job_id, "status": status}
         finally:
-            session.close()
+            conn.close()
 
     def update_status(
         self,
         application_id: int,
         new_status: str,
         notes: Optional[str] = None,
-    ) -> Application:
+    ) -> dict:
         """Update application status.
 
         Args:
@@ -120,46 +127,43 @@ class ApplicationTracker:
         if new_status not in valid_statuses:
             raise ValueError(f"Invalid status '{new_status}'. Must be one of: {valid_statuses}")
 
-        session = get_session()
-
+        conn = self._connect()
         try:
-            application = session.query(Application).filter(
-                Application.id == application_id
-            ).first()
-
-            if not application:
+            cur = conn.cursor()
+            cur.execute("SELECT status, notes FROM applications WHERE id = ?", (application_id,))
+            row = cur.fetchone()
+            if not row:
                 raise ValueError(f"Application {application_id} not found")
 
-            old_status = application.status
-            application.status = new_status
-
-            if new_status == "applied" and not application.applied_at:
-                application.applied_at = datetime.now(timezone.utc)
-
+            old_status = row["status"]
+            existing_notes = row["notes"] or ""
+            applied_at = datetime.now(timezone.utc).isoformat() if new_status == "applied" else None
             if notes:
-                application.notes = (application.notes or "") + f"
-[{datetime.now(timezone.utc).isoformat()}] {notes}"
+                stamp = f"\n[{datetime.now(timezone.utc).isoformat()}] {notes}"
+                existing_notes = existing_notes + stamp
 
-            session.commit()
-            session.refresh(application)
-
+            if applied_at:
+                cur.execute(
+                    "UPDATE applications SET status = ?, applied_at = COALESCE(applied_at, ?), notes = ? WHERE id = ?",
+                    (new_status, applied_at, existing_notes or None, application_id),
+                )
+            else:
+                cur.execute(
+                    "UPDATE applications SET status = ?, notes = ? WHERE id = ?",
+                    (new_status, existing_notes or None, application_id),
+                )
+            conn.commit()
             logger.info(f"Updated application {application_id} status: {old_status} -> {new_status}")
-
-            return application
-
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Failed to update status: {e}")
-            raise
+            return {"id": application_id, "status": new_status}
         finally:
-            session.close()
+            conn.close()
 
     def add_followup(
         self,
         application_id: int,
         followup_date: datetime,
         notes: Optional[str] = None,
-    ) -> Followup:
+    ) -> dict:
         """Add a follow-up reminder.
 
         Args:
@@ -170,37 +174,33 @@ class ApplicationTracker:
         Returns:
             Created Followup object
         """
-        session = get_session()
-
+        conn = self._connect()
         try:
-            application = session.query(Application).filter(
-                Application.id == application_id
-            ).first()
-
-            if not application:
-                raise ValueError(f"Application {application_id} not found")
-
-            followup = Followup(
-                application_id=application_id,
-                followup_date=followup_date,
-                status="pending",
-                notes=notes,
+            cur = conn.cursor()
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS followups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    application_id INTEGER NOT NULL,
+                    followup_date TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    notes TEXT
+                )
+                """
             )
-
-            session.add(followup)
-            session.commit()
-            session.refresh(followup)
-
-            logger.info(f"Added followup {followup.id} for application {application_id}")     
-
-            return followup
-
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Failed to add followup: {e}")
-            raise
+            cur.execute(
+                """
+                INSERT INTO followups (application_id, followup_date, status, notes)
+                VALUES (?, ?, 'pending', ?)
+                """,
+                (application_id, followup_date.isoformat(), notes),
+            )
+            conn.commit()
+            followup_id = cur.lastrowid
+            logger.info(f"Added followup {followup_id} for application {application_id}")
+            return {"id": followup_id, "application_id": application_id}
         finally:
-            session.close()
+            conn.close()
 
     def get_dashboard_summary(self) -> dict:
         """Get dashboard summary with counts by status.
@@ -208,31 +208,38 @@ class ApplicationTracker:
         Returns:
             Dictionary with status counts and application details
         """
-        session = get_session()
-
+        conn = self._connect()
         try:
-            now = datetime.now(timezone.utc)
+            cur = conn.cursor()
+            if not DB_PATH.exists():
+                return {"status_counts": {}, "total": 0, "applications": []}
 
-            applications_with_job = (
-                session.query(Application, Job)
-                .join(Job, Application.job_id == Job.id)
-                .all()
-            )
+            table_names = {
+                row[0]
+                for row in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+            if "jobs" not in table_names:
+                return {"status_counts": {}, "total": 0, "applications": []}
 
-            pending_followups = (
-                session.query(Followup)
-                .filter(
-                    Followup.followup_date >= now,
-                    Followup.status == "pending"
-                )
-                .order_by(Followup.application_id, Followup.followup_date)
-                .all()
-            )
-
-            followup_by_app_id = {}
-            for fu in pending_followups:
-                if fu.application_id not in followup_by_app_id:
-                    followup_by_app_id[fu.application_id] = fu.followup_date
+            if "applications" in table_names:
+                rows = cur.execute(
+                    """
+                    SELECT a.id AS application_id, a.status, a.applied_at,
+                           j.title AS job_title, j.company AS company, j.score AS score
+                    FROM applications a
+                    LEFT JOIN jobs j ON j.id = a.job_id
+                    ORDER BY a.id DESC
+                    """
+                ).fetchall()
+            else:
+                rows = cur.execute(
+                    """
+                    SELECT j.id AS application_id, 'discovered' AS status, NULL AS applied_at,
+                           j.title AS job_title, j.company AS company, j.score AS score
+                    FROM jobs j
+                    ORDER BY j.id DESC
+                    """
+                ).fetchall()
 
             status_counts = {
                 "discovered": 0,
@@ -242,36 +249,26 @@ class ApplicationTracker:
                 "rejected": 0,
                 "withdrawn": 0,
             }
+            summaries: List[ApplicationSummary] = []
+            for row in rows:
+                status = row["status"] or "discovered"
+                status_counts[status] = status_counts.get(status, 0) + 1
+                applied_at = datetime.fromisoformat(row["applied_at"]) if row["applied_at"] else None
+                summaries.append(
+                    ApplicationSummary(
+                        application_id=row["application_id"],
+                        job_title=row["job_title"] or "Unknown",
+                        company=row["company"] or "Unknown",
+                        status=status,
+                        applied_at=applied_at,
+                        next_followup=None,
+                        score=float(row["score"]) if row["score"] is not None else None,
+                    )
+                )
 
-            summaries = []
-
-            for app, job in applications_with_job:
-                status_counts[app.status] = status_counts.get(app.status, 0) + 1
-
-                next_followup = followup_by_app_id.get(app.id)
-
-                summaries.append(ApplicationSummary(
-                    application_id=app.id,
-                    job_title=job.title if job else "Unknown",
-                    company=job.company if job else "Unknown",
-                    status=app.status,
-                    applied_at=app.applied_at,
-                    next_followup=next_followup,
-                    score=job.score if job else None,
-                ))
-
-            summaries.sort(key=lambda s: STATUS_ORDER.get(
-                ApplicationStatus(s.status), 99
-            ))
-
-            return {
-                "status_counts": status_counts,
-                "total": len(applications_with_job),
-                "applications": summaries,
-            }
-
+            return {"status_counts": status_counts, "total": len(summaries), "applications": summaries}
         finally:
-            session.close()
+            conn.close()
 
     def get_upcoming_followups(self, days: int = 7) -> List[dict]:
         """Get upcoming follow-ups within specified days.
@@ -282,41 +279,33 @@ class ApplicationTracker:
         Returns:
             List of follow-up dictionaries
         """
-        session = get_session()
-
+        conn = self._connect()
         try:
-            cutoff = datetime.now(timezone.utc) + timedelta(days=days)
-
-            followups = session.query(Followup).filter(
-                Followup.followup_date <= cutoff,
-                Followup.status == "pending"
-            ).order_by(Followup.followup_date).all()
-
-            results = []
-
-            for followup in followups:
-                app = session.query(Application).filter(
-                    Application.id == followup.application_id
-                ).first()
-
-                if app:
-                    job = session.query(Job).filter(Job.id == app.job_id).first()
-
-                    results.append({
-                        "followup_id": followup.id,
-                        "application_id": app.id,
-                        "job_title": job.title if job else "Unknown",
-                        "company": job.company if job else "Unknown",
-                        "followup_date": followup.followup_date,
-                        "notes": followup.notes,
-                    })
-
-            return results
-
+            cur = conn.cursor()
+            table_names = {
+                row[0]
+                for row in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+            if "followups" not in table_names or "applications" not in table_names or "jobs" not in table_names:
+                return []
+            cutoff = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+            rows = cur.execute(
+                """
+                SELECT f.id AS followup_id, a.id AS application_id, j.title AS job_title,
+                       j.company AS company, f.followup_date, f.notes
+                FROM followups f
+                JOIN applications a ON a.id = f.application_id
+                LEFT JOIN jobs j ON j.id = a.job_id
+                WHERE f.status = 'pending' AND f.followup_date <= ?
+                ORDER BY f.followup_date
+                """,
+                (cutoff,),
+            ).fetchall()
+            return [dict(row) for row in rows]
         finally:
-            session.close()
+            conn.close()
 
-    def mark_followup_complete(self, followup_id: int) -> Followup:
+    def mark_followup_complete(self, followup_id: int) -> dict:
         """Mark a follow-up as completed.
 
         Args:
@@ -325,30 +314,15 @@ class ApplicationTracker:
         Returns:
             Updated Followup object
         """
-        session = get_session()
-
+        conn = self._connect()
         try:
-            followup = session.query(Followup).filter(
-                Followup.id == followup_id
-            ).first()
-
-            if not followup:
-                raise ValueError(f"Followup {followup_id} not found")
-
-            followup.status = "completed"
-            session.commit()
-            session.refresh(followup)
-
-            logger.info(f"Marked followup {followup.id} as completed")
-
-            return followup
-
-        except Exception as e:
-            session.rollback()
-            logger.error(f"Failed to mark followup complete: {e}")
-            raise
+            cur = conn.cursor()
+            cur.execute("UPDATE followups SET status = 'completed' WHERE id = ?", (followup_id,))
+            conn.commit()
+            logger.info(f"Marked followup {followup_id} as completed")
+            return {"id": followup_id, "status": "completed"}
         finally:
-            session.close()
+            conn.close()
 
 
 def create_application(
@@ -356,7 +330,7 @@ def create_application(
     status: str = "discovered",
     resume_path: Optional[str] = None,
     cover_letter_path: Optional[str] = None,
-) -> Application:
+) -> dict:
     """Convenience function to create an application."""
     tracker = ApplicationTracker()
     return tracker.create_application(job_id, status, resume_path, cover_letter_path)
@@ -366,7 +340,7 @@ def update_status(
     application_id: int,
     new_status: str,
     notes: Optional[str] = None,
-) -> Application:
+) -> dict:
     """Convenience function to update application status."""
     tracker = ApplicationTracker()
     return tracker.update_status(application_id, new_status, notes)
@@ -376,7 +350,7 @@ def add_followup(
     application_id: int,
     followup_date: datetime,
     notes: Optional[str] = None,
-) -> Followup:
+) -> dict:
     """Convenience function to add a follow-up."""
     tracker = ApplicationTracker()
     return tracker.add_followup(application_id, followup_date, notes)
@@ -392,3 +366,33 @@ def get_followups(days: int = 7) -> List[dict]:
     """Convenience function to get upcoming follow-ups."""
     tracker = ApplicationTracker()
     return tracker.get_upcoming_followups(days)
+
+
+def get_stats() -> dict:
+    """Return lightweight dashboard stats from `data/jobs.db`."""
+    summary = get_dashboard()
+    status_counts = summary.get("status_counts", {})
+    return {
+        "total_jobs": summary.get("total", 0),
+        "applied_jobs": status_counts.get("applied", 0),
+        "interview_jobs": status_counts.get("interview", 0),
+        "offer_jobs": status_counts.get("offer", 0),
+    }
+
+
+def get_recent_jobs(limit: int = 10) -> List[dict]:
+    """Return recent jobs/applications for dashboard display."""
+    summary = get_dashboard()
+    rows = []
+    for app in summary.get("applications", [])[:limit]:
+        rows.append(
+            {
+                "application_id": app.application_id,
+                "title": app.job_title,
+                "company": app.company,
+                "status": app.status,
+                "score": app.score,
+                "location": "",
+            }
+        )
+    return rows

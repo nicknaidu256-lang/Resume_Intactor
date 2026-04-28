@@ -12,6 +12,8 @@ from .tracker import (
     add_followup,
     get_dashboard,
     get_followups,
+    get_stats,
+    get_recent_jobs,
 )
 
 __all__ = [
@@ -23,4 +25,6 @@ __all__ = [
     "add_followup",
     "get_dashboard",
     "get_followups",
+    "get_stats",
+    "get_recent_jobs",
 ]
