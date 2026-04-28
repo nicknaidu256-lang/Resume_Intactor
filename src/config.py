@@ -71,7 +71,7 @@ class Config:
         )
         self.search_keywords = [kw.strip() for kw in raw_keywords.split(",") if kw.strip()]
         self.search_location = os.getenv("SEARCH_LOCATION", "Melbourne VIC")
-        self.score_threshold = float(os.getenv("SCORE_THRESHOLD", "0.45"))
+        self.score_threshold = float(os.getenv("SCORE_THRESHOLD", "0.30"))
         self.max_jobs_per_run = int(os.getenv("MAX_JOBS_PER_RUN", "10"))
 
         # Backward-compatible nested scraping config used by scraper_runner.py

@@ -13,9 +13,8 @@ from typing import Optional, List, Dict
 import json
 import os
 
-from src.utils import get_logger
-
-logger = get_logger("scoring")
+import logging
+logger = logging.getLogger("scoring")
 
 
 @dataclass
