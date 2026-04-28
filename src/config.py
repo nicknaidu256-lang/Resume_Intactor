@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Optional
 
 # Load .env from project root
@@ -35,6 +36,13 @@ class Config:
     log_level: str
     debug: bool
 
+    # Job search / scoring
+    search_keywords: list[str]
+    search_location: str
+    score_threshold: float
+    max_jobs_per_run: int
+    scraping: SimpleNamespace
+
     def __init__(self):
         """Load and validate configuration."""
         # Cerebras settings (primary)
@@ -55,6 +63,22 @@ class Config:
         # Logging
         self.log_level = os.getenv("LOG_LEVEL", "INFO").upper()
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
+
+        # Job search / scoring
+        raw_keywords = os.getenv(
+            "SEARCH_KEYWORDS",
+            "systems engineering,capital projects,gmp pharmaceutical,technology transfer",
+        )
+        self.search_keywords = [kw.strip() for kw in raw_keywords.split(",") if kw.strip()]
+        self.search_location = os.getenv("SEARCH_LOCATION", "Melbourne VIC")
+        self.score_threshold = float(os.getenv("SCORE_THRESHOLD", "0.45"))
+        self.max_jobs_per_run = int(os.getenv("MAX_JOBS_PER_RUN", "10"))
+
+        # Backward-compatible nested scraping config used by scraper_runner.py
+        self.scraping = SimpleNamespace(
+            seek_search_keywords=",".join(self.search_keywords),
+            seek_location=self.search_location,
+        )
 
         # Validate: both API keys must be set
         if not self.cerebras_api_key:

@@ -147,6 +147,7 @@ def run_full_scrape(
             "total_normalised": 0,
             "new_jobs_inserted": 0,
             "by_source": {},
+            "jobs": [],
         }
     
     normalised_jobs = normalise_job_list(all_raw_jobs)
@@ -217,6 +218,7 @@ def run_full_scrape(
         "total_normalised": len(normalised_jobs),
         "new_jobs_inserted": new_jobs_inserted,
         "by_source": by_source,
+        "jobs": unique_jobs,
     }
 
     total_new = result.get("new_jobs_inserted", 0)
