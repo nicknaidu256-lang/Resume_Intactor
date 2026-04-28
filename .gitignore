@@ -82,3 +82,11 @@ test_layout_engine.py
 temp_archive_orig/
 temp_master/
 *.zip
+
+# Reference folder (not part of this project)
+Resumae/
+
+# Data (SQLite DB - do not commit)
+data/*.db
+data/*.sqlite
+data/*.sqlite3
