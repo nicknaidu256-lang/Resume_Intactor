@@ -89,35 +89,45 @@ def _extract_jobs(scrape_result):
 @cli.command()
 def scrape():
     """Scrape jobs from SEEK and Jora."""
-    click.echo("🔍 Starting job scrape...")
-    keywords = config.search_keywords
-    location = config.search_location
-
-    run_full_scrape = _get_scrape_runner()
-    result = run_full_scrape(keywords, location, sources=["seek", "jora"])
-    jobs = _extract_jobs(result)
-    click.echo(f"✅ Found {len(jobs)} jobs")
+    click.echo("Starting job scrape...")
+    keywords = config.search_keywords if hasattr(config, 'search_keywords') else ["Process Engineer"]
+    location = config.search_location if hasattr(config, 'search_location') else "Melbourne VIC"
+    
+    from src.scrapers.scraper_runner import run_full_scrape
+    jobs = run_full_scrape(keywords, location)
+    click.echo(f"Found {len(jobs)} jobs")
 
 
 @cli.command()
 def score():
     """Score scraped jobs against profile."""
-    click.echo("📊 Scoring jobs...")
+    click.echo("Scoring jobs...")
     click.echo("Scoring not yet wired to DB")
 
 
 @cli.command()
 def run():
     """Full pipeline: scrape to score."""
-    click.echo("🚀 Running full pipeline...")
-    run_full_scrape = _get_scrape_runner()
-    score_jobs = _get_scorer()
-    result = run_full_scrape(config.search_keywords, config.search_location)
-    jobs = _extract_jobs(result)
+    click.echo("Running full pipeline...")
+    keywords = config.search_keywords if hasattr(config, 'search_keywords') else ["Process Engineer"]
+    location = config.search_location if hasattr(config, 'search_location') else "Melbourne VIC"
+    
+    from src.scrapers.scraper_runner import run_full_scrape
+    from src.scoring.scorer import score_jobs
+    
+    jobs = run_full_scrape(keywords, location)
     click.echo(f"Scraped {len(jobs)} jobs")
 
     if not jobs:
         click.echo("No jobs found")
+        return
+    
+    threshold = config.score_threshold if hasattr(config, 'score_threshold') else 0.45
+    scored = score_jobs(jobs, threshold=threshold)
+    click.echo(f"Qualified: {len(scored)} jobs (score >= {threshold})")
+    
+    for job in scored[:10]:
+        click.echo(f"  - {job.get('title', 'N/A')} @ {job.get('company', 'N/A')} (score: {job.get('score', 0)})")
         return
 
     scored = score_jobs(jobs, threshold=config.score_threshold)
