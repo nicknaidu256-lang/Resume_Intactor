@@ -1,0 +1,72 @@
+{
+  "name": "Abhilash Naidu Paspulati",
+  "title": "MS&T Process Engineer (Technology Transfer Lead)",
+  "employer": "CSL Seqirus",
+  "role_start_date": "Jul 2022",
+  "role_end_date": "Present",
+  "total_experience_years": 10,
+  "industry_focus": "GMP pharmaceutical, regulated manufacturing, systems engineering",
+  "location": "Melbourne, Australia",
+  "email": "abhilash.naidu.paspulati@gmail.com",
+  "phone": "+61 412 345 678",
+  "experience": [
+    "Lead technology transfer and systems integration for vaccine (flu cell culture) and antivenom platforms",
+    "Direct and coordinate cross-functional teams across engineering, quality, operations, automation, and regulatory functions",
+    "Manage requirements traceability, design control, and validation alignment with TGA/FDA/EU regulatory frameworks",
+    "Lead capital project planning, risk assessment, and design review coordination",
+    "Manage regulatory compliance through risk assessments, hazard analyses, deviation closure, validation planning, and design change control",
+    "Facilitate multi-site and global stakeholder collaboration on systems integration and process scale-up"
+  ],
+  "achievements": [
+    "Contributed to $800M Project Banksia technology transfer, coordinating 10+ cross-functional teams",
+    "Led multi-stream technical teams; mentored junior engineers",
+    "Delivered GMP-compliant systems under TGA/FDA/EU frameworks",
+    "Executed vendor qualification, FAT/SAT, and equipment commissioning",
+    "Standardised design control, technical documentation, and risk-based engineering reviews",
+    "Optimised manufacturing design and process parameters",
+    "Coordinated technology transfer and process scale-up across multiple sites"
+  ],
+  "skills": {
+    "engineering_management": [
+      "Systems engineering",
+      "requirements management",
+      "team leadership",
+      "regulatory compliance (TGA, FDA, EU)",
+      "design control",
+      "stakeholder engagement",
+      "risk analysis"
+    ],
+    "technical_delivery": [
+      "Systems integration",
+      "equipment validation (IQ/OQ)",
+      "FAT/SAT",
+      "URS",
+      "design verification",
+      "manufacturing engineering",
+      "utility systems (HVAC, WFI, RO)"
+    ],
+    "safety_and_quality": [
+      "WHS",
+      "quality assurance",
+      "CAPA",
+      "deviation management",
+      "validation planning",
+      "budget forecasting"
+    ]
+  },
+  "education": [
+    {
+      "degree": "Master of Engineering (Manufacturing Engineering)",
+      "institution": "RMIT"
+    },
+    {
+      "degree": "BEng Mechanical",
+      "institution": "JNTU"
+    }
+  ],
+  "salary": {
+    "annual_min": 130000,
+    "annual_max": 150000,
+    "currency": "AUD"
+  }
+}
